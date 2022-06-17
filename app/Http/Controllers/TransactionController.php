@@ -2,42 +2,32 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\HookRequest;
 use App\Models\Transaction;
+use App\Services\amoCRM\Note;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Ufee\Amo\Oauthapi;
 
 class TransactionController extends Controller
 {
-    public function create(Request $request)
+    public function index(HookRequest $request, Oauthapi $amoApi)
     {
-//        Log::info(__METHOD__);
-        
-        $transaction = Transaction::getTransaction();
+        $transaction = Transaction::createOrUpdate($request);
 
-        if($transaction) {
+        $record = $transaction->record;
 
-            $record = $transaction->record;
+        if ($record->lead_id) {
 
-            if($record) {
+            (new Note($amoApi))
+                ->create(
+                    $record,
+                    $amoApi->leads()->find($record->lead_id),
+                    'pay',
+                );
 
-                if($record->lead_id) {
-
-                    $lead = $this->amoApi->getLead($record->lead_id);
-
-                    $this->amoApi->updateStatus($lead, $this->amoApi::pipelineHelper($lead->pipeline_id, $record));
-
-                    $this->amoApi->createNoteLeadTransaction($transaction, $record);
-
-                    $record->status = 'payed';
-                    $record->save();
-                }
-            }
+            $record->status = 'payed';
+            $record->save();
         }
     }
 }
-
-//TODO data|account|title //ФОНД ВЫПЛАТ и тл, Расчетный счет и Основная касса
-//TODO в массиве нет инфы об записи операции
-//TODO пополнение счета? шо за фрукт
-//TODO update status wtf??
-//TODO data|expense|title : Оказание услуг

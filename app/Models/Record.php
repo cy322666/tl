@@ -3,13 +3,22 @@
 namespace App\Models;
 
 use App\Services\YClients;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 class Record extends Model
 {
+    /*
+    *  3 - Запись удалена,
+    *  2 - Пользователь подтвердил запись,
+    *  1 - Пользователь пришел, услуги оказаны,
+    *  0 - Ожидание пользователя,
+    * -1 - Пользователь не пришел на визит
+    */
     protected $primaryKey = 'record_id';
     protected $guarded  = [];
     protected $fillable = [
@@ -28,164 +37,98 @@ class Record extends Model
         'status',
     ];
 
-    /*
-     * 2 - Пользователь подтвердил запись,
-     * 1 - Пользователь пришел, услуги оказаны,
-     * 0 - Оожидание пользователя,
-     * -1 - Пользователь не пришел на визит
-     */
     public static function getEvent(int $attendance) :? string
     {
-        switch ($attendance) {
-
-            case -1 :
-                return 'Клиент не пришел';
-
-            case 0 :
-                return 'Клиент записан';
-
-            case 1 :
-                return 'Клиент пришел';
-
-            case 2 :
-                return 'Клиент подтвердил';
-        }
+        return match ($attendance) {
+           -1 => 'Клиент не пришел',
+            0 => 'Клиент записан',
+            1 => 'Клиент пришел',
+            2 => 'Клиент подтвердил',
+            3 => 'Запись удалена',
+        };
     }
 
     public static function getFilial(int $company_id) :? string
     {
-        switch ($company_id) {
-
-            case '28103'://москва
-            case '1021063':
-
-                return 'Москва Тульская';
-
-            case '119809'://ярославль
-            case '1021067':
-
-                return 'Ярославль';
-
-            case '119834'://рыбинск
-            case '1021065':
-
-                return 'Рыбинск';
-
-            case '1121147'://машкова
-            case '274576':
-
-                return 'Москва Покровка';
-        }
-        return null;
+        return match ($company_id) {
+            28103, 1021063  => 'Москва Тульская',
+            119809, 1021067 => 'Ярославль',
+            119834, 1021065 => 'Рыбинск',
+            1121147, 274576 => 'Москва Покровка',
+        };
     }
 
-    public static function buildArrayForModel($arrayRequest)
+    public static function getStatusId(int $attendance, int $pipelineId): int
     {
-        Log::info(__METHOD__);
-        
-        $stringServices = '';
-        $costSumm = 0;
+        if ($pipelineId == env('FIRST_PIPELINE')) {
 
-        if(!empty($arrayRequest['data']['services'][0])) {
+            return match ($attendance) {
+               -1 => env('STATUS_CANCEL'),
+                0 => env('STATUS_WAIT'),
+                1 => env('STATUS_CAME'),
+                2 => env('STATUS_CONFIRM'),
+                3 => env('STATUS_DELETE'),
+            };
+        }
+        if ($pipelineId == env('SECOND_PIPELINE')) {
 
-            foreach ($arrayRequest['data']['services'] as $array) {
+            return match ($attendance) {
+               -1 => env('STATUS2_CANCEL'),
+                0 => env('STATUS2_WAIT'),
+                1 => env('STATUS2_CAME'),
+                2 => env('STATUS2_CONFIRM'),
+                3 => env('STATUS2_DELETE'),
+            };
+        }
+    }
+
+    public static function updateOrCreate(SymfonyRequest $request): Model|Builder
+    {
+        return Record::query()
+            ->updateOrCreate([
+                'record_id'  => $request->data['id'],
+            ],[
+                'company_id' => $request->company_id,
+                'title' => self::buildCommentServices($request->data),
+                'cost'  => self::sumCostServices($request->data),
+                'staff_id'   => $request->data['staff_id'],
+                'staff_name' => $request->data['staff']['name'],
+                'client_id'  => $request->data['client']['id'],
+                'visit_id'   => $request->data['visit_id'],
+                'datetime'   => Carbon::parse($request->data['datetime'])->format('Y.m.d H:i:s'),
+                'comment'    => $request->data['comment'],
+                'seance_length' => $request->data['length'],
+                'attendance' => $request->data['attendance'],
+                'status'     => 'no_pay',
+            ]);
+    }
+
+    private static function sumCostServices(array $array): int
+    {
+        if(!empty($arrayRequest['services'][0])) {
+
+            foreach ($arrayRequest['services'] as $array) {
+
+                $costSumm += $array['cost'];
+            }
+        }
+        return $costSumm ?? 0;
+    }
+
+    private static function buildCommentServices(array $arrayRequest): string
+    {
+        if(!empty($arrayRequest['services'][0])) {
+
+            foreach ($arrayRequest['services'] as $array) {
 
                 $stringServices .= $array['title'].' |';
-                $costSumm += $array['cost'];
             }
             $stringServices = trim($stringServices, ' |', );
         }
-
-        $arrayForModel = [
-            'record_id'  => $arrayRequest['resource_id'],
-            'company_id' => $arrayRequest['company_id'],
-            'title' => $stringServices,
-            'cost' => $costSumm,
-            'staff_id' => $arrayRequest['data']['staff_id'],
-            'staff_name' => $arrayRequest['data']['staff']['name'],
-            'client_id' => $arrayRequest['data']['client']['id'],
-            'visit_id' => $arrayRequest['data']['visit_id'],
-            'datetime' => Carbon::parse($arrayRequest['data']['datetime'])->format('Y.m.d H:i:s'),
-            'comment' => $arrayRequest['data']['comment'],
-            'seance_length' => $arrayRequest['data']['length'],
-            'attendance' => $arrayRequest['data']['attendance'],
-            'status' => 'no_pay',
-        ];
-
-        return $arrayForModel;
+        return $stringServices ?? '';
     }
 
-    public static function getStatus(int $attendance): array
-    {
-        switch ($attendance) {//TODO актуализировать статусы
-            /*
-             * 3 - Запись удалена,
-             * 2 - Пользователь подтвердил запись,
-             * 1 - Пользователь пришел, услуги оказаны,
-             * 0 - Оожидание пользователя,
-             * -1 - Пользователь не пришел на визит
-             */
-            case -1 :
-                $status_name = 'did_not_come';
-                $action = 'cancel';
-                $status_id = env('STATUS_CANCEL');//TODO delete?
-                break;
-
-            case 0 :
-            default:
-                $status_name = 'waiting';
-                $action = 'wait';
-                $status_id = env('STATUS_WAIT');
-                break;
-
-            case 1 :
-                $status_name = 'came';
-                $action = 'came';
-                $status_id = env('STATUS_CAME');
-                break;
-
-            case 2 :
-                $status_name = 'confirmed';
-                $action = 'confirm';
-                $status_id = env('STATUS_CONFIRM');
-                break;
-
-            case 3 :
-                $status_name = 'delete';
-                $action = 'delete';
-                $status_id = env('STATUS_DELETE');
-                break;
-        }
-
-        return [
-            'status_id' => $status_id,
-            'name' => $status_name,
-            'action' => $action,
-        ];
-    }
-
-    public static function getRecord($requestArray)
-    {
-        Log::info(__METHOD__, $requestArray);
-        
-        $arrayForRecord = self::buildArrayForModel($requestArray);
-    
-        Log::info('array for record', $arrayForRecord);
-
-        $record = Record::where('record_id',$arrayForRecord['record_id'])->first();
-
-        if(!$record)
-
-            $record = Record::create($arrayForRecord);
-        else
-            $record->fill($arrayForRecord);
-
-        $record->save();
-
-        return $record = Record::where('record_id',$arrayForRecord['record_id'])->first();
-    }
-
-    public function client()
+    public function client(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo('App\Models\Client', 'client_id', 'client_id');
     }

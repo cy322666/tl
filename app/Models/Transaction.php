@@ -2,12 +2,11 @@
 
 namespace App\Models;
 
-use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Model;
+use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 
 class Transaction extends Model
 {
-    protected $primaryKey = 'transaction_id';
     protected $fillable = [
         'company_id',
         'amount',
@@ -18,46 +17,28 @@ class Transaction extends Model
         'comment',
     ];
 
-    public static function getTransaction()
+    public static function createOrUpdate(SymfonyRequest $request): Model|\Illuminate\Database\Eloquent\Builder
     {
-        $request = Request::capture()->toArray();
-
-        if($request['data']['record_id'] != 0) {
-
-            $arrayForRecord = self::buildArrayForModel($request);
-
-            $transaction = Transaction::create($arrayForRecord);
-
-            $record = $transaction->record;
-
-            $record->attendance = 1;
-            $record->save();
-
-            return $transaction;
-        }
+        return Record::query()
+            ->updateOrCreate([
+                'transaction_id' => $request->data['id'],
+            ],[
+                'record_id'  => $request->data['record_id'],
+                'company_id' => $request->company_id,
+                'client_id'  => $request->data['client']['id'],
+                'visit_id'   => $request->data['visit_id'],
+                'amount'     => $request->data['amount'],
+                'comment'    => $request->data['comment'],
+            ]);
+            // TODO хз надо ли $record->attendance = 1;
     }
 
-    public static function buildArrayForModel($arrayRequest)
+    public function client(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
-        $arrayForModel = [
-            'record_id'  => $arrayRequest['data']['record_id'],
-            'transaction_id'  => $arrayRequest['data']['id'],
-            'company_id' => $arrayRequest['company_id'],
-            'client_id' => $arrayRequest['data']['client']['id'],
-            'visit_id' => $arrayRequest['data']['visit_id'],
-            'amount' => $arrayRequest['data']['amount'],
-            'comment' => $arrayRequest['data']['comment'],
-        ];
-
-        return $arrayForModel;
+        return $this->belongsTo('App\Models\Client', 'client_id', 'client_id');
     }
 
-    public function client()
-    {
-        return $this->belongsTo('App\Models\Client');
-    }
-
-    public function record()
+    public function record(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo('App\Models\Record', 'record_id', 'record_id');
     }

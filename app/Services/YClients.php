@@ -3,32 +3,26 @@
 namespace App\Services;
 
 use App\Models\Client;
+use App\Models\YClients as YC;
 
 class YClients
 {
-    public static function instance()
+    public static function instance(): YC
     {
-        $yclients = new \App\Models\YClients(env('YC_PARTNER_TOKEN'));
+        $yclients = new YC(env('YC_PARTNER_TOKEN'));
         $yclients->getAuth(env('YC_LOGIN'), env('YC_PASSWORD'));
 
         return $yclients;
     }
 
-    public static function getClient(Client $client)
+    public static function getClient(Client $client): array
     {
         $yclients = self::instance();
 
         return $yclients->getClient(
-            $client->company_id, $client->client_id, env('YC_USER_TOKEN')
-        );
-    }
-
-    public static function getAbonements(Client $client)
-    {
-        $yclients = self::instance();
-
-        return $yclients->getUserAbonements(
-            $client->company_id, $client->phone, env('YC_USER_TOKEN')
+            $client->company_id,
+            $client->client_id,
+            env('YC_USER_TOKEN')
         );
     }
 }
