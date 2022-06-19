@@ -28,8 +28,10 @@ class Lead
 
             $lead = $this->search($contact);
 
-            if ($lead)
-                $pipelineId = $lead->pipeline_id;
+            if ($lead !== true) {
+
+                $pipelineId = $lead[0]['pipeline_id'];
+            }
             else
                 $pipelineId = env('SECOND_PIPELINE');
         } else
@@ -41,7 +43,7 @@ class Lead
 
             $lead = $this->createLead($contact, $record, $statusId);
         } else
-            $lead = $this->update($record, $lead, $statusId);
+            $lead = $this->update($record, $this->amoApi->leads()->find($lead[0]['id']), $statusId);
 
         $record->lead_id = $lead->id;
         $record->save();
@@ -53,16 +55,17 @@ class Lead
     {
         $leads = $contact->leads;
 
-        $lead = static::getActiveLead($leads, env('SECOND_PIPELINE'));
+        $lead = $this->getActive($leads, env('SECOND_PIPELINE'));
 
         if (!$lead) {
 
-            $lead = static::getActiveLead($leads, env('FIRST_PIPELINE'));
+            $lead = $this->getActive($leads, env('FIRST_PIPELINE'));
         }
+
         return $lead ?? true;
     }
 
-    private static function getActiveLead($leads, int $pipelineId)
+    private function getActive($leads, int $pipelineId)
     {
         return array_filter($leads->toArray(), function($lead) use ($pipelineId) {
 

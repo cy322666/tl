@@ -105,18 +105,22 @@ class Record extends Model
 
     private static function sumCostServices(array $array): int
     {
+        $costSum = 0;
+
         if(!empty($arrayRequest['services'][0])) {
 
             foreach ($arrayRequest['services'] as $array) {
 
-                $costSumm += $array['cost'];
+                $costSum += $array['cost'];
             }
         }
-        return $costSumm ?? 0;
+        return $costSum ?? 0;
     }
 
     private static function buildCommentServices(array $arrayRequest): string
     {
+        $stringServices = '';
+
         if(!empty($arrayRequest['services'][0])) {
 
             foreach ($arrayRequest['services'] as $array) {

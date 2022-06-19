@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\Requests\HookRequest;
 use App\Models\Transaction;
 use App\Services\amoCRM\Note;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Ufee\Amo\Oauthapi;
 
 class TransactionController extends Controller
